@@ -123,3 +123,45 @@ Notes:
   `MaterialIcons-Regular.otf`, which Shorebird treats as an asset change. Make
   sure every glyph used already exists in the published release, then patch
   with `shorebird patch android --release-version=<version> --allow-asset-diffs`.
+## In-app APK releases (ReVanced Manager-style)
+
+`lib/update_gate.dart` checks for full app releases before the Shorebird patch
+flow:
+
+1. On Android, it fetches the latest GitHub release for
+   `SohailDev7/Android-App` and compares its tag/version to the installed app
+   version (`package_info_plus`).
+2. If a newer release with an `.apk` asset is found, the app shows a
+   non-dismissible **"New release detected"** dialog.
+3. Tapping **Download & install** downloads the APK into the app cache with
+   progress, then launches the Android package installer.
+4. Android 8+ requires "Install unknown apps" permission for Classe; the app
+   opens that settings screen when needed, then the user taps **Install update**.
+5. After installation completes in the system installer, the user opens the new
+   build.
+
+Publishing a release for this flow:
+
+```sh
+# Bump pubspec version (versionName+buildNumber), then build:
+flutter build apk --release
+# or create a Shorebird release + extract/distribute APK as needed:
+shorebird release android
+```
+
+Create a GitHub Release (e.g. tag `v1.2.0`) and attach the APK asset (filename
+ending in `.apk`). The in-app updater uses the latest release tag and its APK
+asset.
+
+Important:
+
+- Users must install one build that contains this updater/native install
+  plumbing. Existing installs without `REQUEST_INSTALL_PACKAGES`, the
+  `FileProvider`, and the `classe/restart` install methods cannot receive those
+  native changes via a Shorebird Dart patch.
+- Use normal Android signing for distributed APKs (not debug signing) so updates
+  can install over the same app id.
+- Shorebird patch flow still runs when no newer APK release is detected, so
+  Dart-only fixes can continue to ship as patches after users are on a
+  compatible release.
+

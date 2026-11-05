@@ -3,19 +3,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_updater.dart';
+import 'services/apk_installer.dart';
+import 'services/release_update_service.dart';
 import 'theme/app_theme.dart';
 
-/// Runs the mandatory update flow around [child].
+/// Runs mandatory update flows around [child].
 ///
-/// If a patch is available the user cannot use the app until it is
-/// downloaded, and once downloaded a restart dialog is shown.
+/// Priority:
+/// 1. Full APK release detected (GitHub Releases) -> in-app download + install.
+/// 2. Shorebird patch available -> download patch + restart.
+/// 3. Shorebird patch already downloaded -> restart.
 class UpdateGate extends StatefulWidget {
-  const UpdateGate({super.key, required this.child, this.updater});
+  const UpdateGate({
+    super.key,
+    required this.child,
+    this.updater,
+    this.releaseService,
+    this.apkInstaller,
+  });
 
   final Widget child;
 
   /// Optional override, mainly useful for tests.
   final AppUpdater? updater;
+  final ReleaseUpdateService? releaseService;
+  final ApkInstaller? apkInstaller;
 
   @override
   State<UpdateGate> createState() => _UpdateGateState();
@@ -23,6 +35,10 @@ class UpdateGate extends StatefulWidget {
 
 class _UpdateGateState extends State<UpdateGate> {
   late final AppUpdater _updater = widget.updater ?? ShorebirdAppUpdater();
+  late final ReleaseUpdateService _releaseService =
+      widget.releaseService ?? GithubReleaseUpdateService();
+  late final ApkInstaller _apkInstaller =
+      widget.apkInstaller ?? AndroidApkInstaller();
   bool _flowStarted = false;
 
   @override
@@ -32,9 +48,34 @@ class _UpdateGateState extends State<UpdateGate> {
   }
 
   Future<void> _runUpdateFlow() async {
-    if (_flowStarted || !_updater.isAvailable) return;
+    if (_flowStarted) return;
     _flowStarted = true;
 
+    // 1) Check for a full APK release (new installed build required).
+    if (_releaseService.isSupported) {
+      final release = await _releaseService.checkForNewRelease();
+      if (!mounted) return;
+      if (release != null) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => PopScope(
+            canPop: false,
+            child: _ReleaseRequiredDialog(
+              release: release,
+              service: _releaseService,
+              installer: _apkInstaller,
+            ),
+          ),
+        );
+        // If install was launched, Android takes over; keep gate up.
+        if (!mounted) return;
+        return;
+      }
+    }
+
+    // 2) Shorebird patch flow (Dart-only OTA).
+    if (!_updater.isAvailable) return;
     final info = await _updater.check();
     if (!mounted) return;
 
@@ -68,6 +109,174 @@ class _UpdateGateState extends State<UpdateGate> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+class _ReleaseRequiredDialog extends StatefulWidget {
+  const _ReleaseRequiredDialog({
+    required this.release,
+    required this.service,
+    required this.installer,
+  });
+
+  final ReleaseInfo release;
+  final ReleaseUpdateService service;
+  final ApkInstaller installer;
+
+  @override
+  State<_ReleaseRequiredDialog> createState() => _ReleaseRequiredDialogState();
+}
+
+class _ReleaseRequiredDialogState extends State<_ReleaseRequiredDialog> {
+  bool _isWorking = false;
+  double? _progress;
+  String? _downloadedPath;
+  String? _error;
+
+  Future<void> _downloadAndInstall() async {
+    setState(() {
+      _isWorking = true;
+      _progress = 0;
+      _error = null;
+    });
+
+    final file = _downloadedPath == null
+        ? await widget.service.downloadApk(
+            widget.release,
+            onProgress: (received, total) {
+              if (!mounted) return;
+              setState(() {
+                _progress = total != null && total > 0 ? received / total : null;
+              });
+            },
+          )
+        : null;
+
+    if (!mounted) return;
+    final path = file?.path ?? _downloadedPath;
+    if (path == null) {
+      setState(() {
+        _isWorking = false;
+        _progress = null;
+        _error = 'The update could not be downloaded. Check your connection and try again.';
+      });
+      return;
+    }
+
+    _downloadedPath = path;
+    await _install(path);
+  }
+
+  Future<void> _install(String path) async {
+    setState(() {
+      _isWorking = true;
+      _error = null;
+      _progress = null;
+    });
+
+    final canInstall = await widget.installer.canInstallPackages();
+    if (!mounted) return;
+    if (!canInstall) {
+      await widget.installer.openInstallPermissionSettings();
+      if (!mounted) return;
+      setState(() {
+        _isWorking = false;
+        _error =
+            'Allow installs from this app, then tap "Install update" to continue.';
+      });
+      return;
+    }
+
+    final ok = await widget.installer.installApk(path);
+    if (!mounted) return;
+    if (!ok) {
+      setState(() {
+        _isWorking = false;
+        _error = 'Could not start the installer. You can try again.';
+      });
+      return;
+    }
+
+    // Installer activity opened; keep dialog as a fallback if user returns.
+    setState(() {
+      _isWorking = false;
+      _error = 'Installer opened. Complete installation to use the new version.';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDownload = _downloadedPath != null;
+    return AlertDialog(
+      icon: Container(
+        width: 70,
+        height: 70,
+        decoration: const BoxDecoration(
+          color: AppColors.lime,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.new_releases_rounded,
+          size: 32,
+          color: AppColors.ink,
+        ),
+      ),
+      title: const Text('New release detected'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Version ${widget.release.versionName} is available. '
+            'Download and install it inside the app to continue.',
+            textAlign: TextAlign.center,
+          ),
+          if (_isWorking) ...[
+            const SizedBox(height: 20),
+            if (_progress != null)
+              LinearProgressIndicator(
+                value: _progress,
+                backgroundColor: const Color(0xFFE8E8E3),
+                color: AppColors.ink,
+              )
+            else
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            const SizedBox(height: 10),
+            Text(
+              _progress != null
+                  ? 'Downloading update… ${(_progress! * 100).toStringAsFixed(0)}%'
+                  : (hasDownload ? 'Starting installer…' : 'Downloading update…'),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 14),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        FilledButton(
+          onPressed: _isWorking ? null : _downloadAndInstall,
+          child: Text(
+            hasDownload
+                ? (_error != null ? 'Install update' : 'Install again')
+                : (_error == null ? 'Download & install' : 'Try again'),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Non-dismissible dialog that forces the user to download the update.

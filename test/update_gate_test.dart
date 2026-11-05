@@ -1,7 +1,11 @@
+﻿import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:classe/app_updater.dart';
+import 'package:classe/services/apk_installer.dart';
+import 'package:classe/services/release_update_service.dart';
 import 'package:classe/update_gate.dart';
 
 class _FakeUpdater implements AppUpdater {
@@ -27,10 +31,40 @@ class _FakeUpdater implements AppUpdater {
   }
 }
 
+class _NoReleaseService implements ReleaseUpdateService {
+  @override
+  bool get isSupported => false;
+
+  @override
+  Future<ReleaseInfo?> checkForNewRelease() async => null;
+
+  @override
+  Future<File?> downloadApk(
+    ReleaseInfo release, {
+    void Function(int received, int? total)? onProgress,
+  }) async => null;
+}
+
+class _FakeApkInstaller implements ApkInstaller {
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<bool> canInstallPackages() async => true;
+
+  @override
+  Future<void> openInstallPermissionSettings() async {}
+
+  @override
+  Future<bool> installApk(String path) async => true;
+}
+
 Widget _app(AppUpdater updater) {
   return MaterialApp(
     home: UpdateGate(
       updater: updater,
+      releaseService: _NoReleaseService(),
+      apkInstaller: _FakeApkInstaller(),
       child: const Scaffold(body: Center(child: Text('App content'))),
     ),
   );
@@ -43,6 +77,7 @@ void main() {
 
     expect(find.text('Update required'), findsNothing);
     expect(find.text('Restart required'), findsNothing);
+    expect(find.text('New release detected'), findsNothing);
     expect(find.text('App content'), findsOneWidget);
   });
 

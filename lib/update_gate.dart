@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,12 +7,6 @@ import 'services/apk_installer.dart';
 import 'services/release_update_service.dart';
 import 'theme/app_theme.dart';
 
-/// Runs mandatory update flows around [child].
-///
-/// Priority:
-/// 1. Full APK release detected (GitHub Releases) -> in-app download + install.
-/// 2. Shorebird patch available -> download patch + restart.
-/// 3. Shorebird patch already downloaded -> restart.
 class UpdateGate extends StatefulWidget {
   const UpdateGate({
     super.key,
@@ -23,8 +17,6 @@ class UpdateGate extends StatefulWidget {
   });
 
   final Widget child;
-
-  /// Optional override, mainly useful for tests.
   final AppUpdater? updater;
   final ReleaseUpdateService? releaseService;
   final ApkInstaller? apkInstaller;
@@ -51,7 +43,6 @@ class _UpdateGateState extends State<UpdateGate> {
     if (_flowStarted) return;
     _flowStarted = true;
 
-    // 1) Check for a full APK release (new installed build required).
     if (_releaseService.isSupported) {
       final release = await _releaseService.checkForNewRelease();
       if (!mounted) return;
@@ -68,13 +59,11 @@ class _UpdateGateState extends State<UpdateGate> {
             ),
           ),
         );
-        // If install was launched, Android takes over; keep gate up.
         if (!mounted) return;
         return;
       }
     }
 
-    // 2) Shorebird patch flow (Dart-only OTA).
     if (!_updater.isAvailable) return;
     final info = await _updater.check();
     if (!mounted) return;
@@ -89,9 +78,7 @@ class _UpdateGateState extends State<UpdateGate> {
         ),
       );
       if (!mounted) return;
-      if (downloaded == true) {
-        await _showRestartDialog();
-      }
+      if (downloaded == true) await _showRestartDialog();
     } else if (info.restartRequired) {
       await _showRestartDialog();
     }
@@ -102,13 +89,85 @@ class _UpdateGateState extends State<UpdateGate> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          const PopScope(canPop: false, child: _RestartRequiredDialog()),
+      builder: (context) => const PopScope(canPop: false, child: _RestartRequiredDialog()),
     );
   }
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+class _DialogFrame extends StatelessWidget {
+  const _DialogFrame({
+    required this.icon,
+    required this.iconGradient,
+    required this.title,
+    required this.actions,
+    required this.child,
+  });
+
+  final IconData icon;
+  final Gradient iconGradient;
+  final String title;
+  final Widget child;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 74,
+              height: 74,
+              decoration: BoxDecoration(
+                gradient: iconGradient,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: AppColors.glowShadow,
+              ),
+              child: Icon(icon, color: Colors.white, size: 34),
+            ),
+            const SizedBox(height: 16),
+            Text(title, textAlign: TextAlign.center, style: Theme.of(context).dialogTheme.titleTextStyle),
+            const SizedBox(height: 10),
+            child,
+            const SizedBox(height: 18),
+            for (final action in actions) ...[
+              SizedBox(width: double.infinity, child: action),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.text, this.icon});
+  final String text;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[Icon(icon, size: 15, color: AppColors.primary), const SizedBox(width: 6)],
+          Text(text, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        ],
+      ),
+    );
+  }
 }
 
 class _ReleaseRequiredDialog extends StatefulWidget {
@@ -144,9 +203,7 @@ class _ReleaseRequiredDialogState extends State<_ReleaseRequiredDialog> {
             widget.release,
             onProgress: (received, total) {
               if (!mounted) return;
-              setState(() {
-                _progress = total != null && total > 0 ? received / total : null;
-              });
+              setState(() => _progress = total != null && total > 0 ? received / total : null);
             },
           )
         : null;
@@ -180,109 +237,88 @@ class _ReleaseRequiredDialogState extends State<_ReleaseRequiredDialog> {
       if (!mounted) return;
       setState(() {
         _isWorking = false;
-        _error =
-            'Allow installs from this app, then tap "Install update" to continue.';
+        _error = 'Allow installs from this app, then tap "Install update" to continue.';
       });
       return;
     }
 
     final ok = await widget.installer.installApk(path);
     if (!mounted) return;
-    if (!ok) {
-      setState(() {
-        _isWorking = false;
-        _error = 'Could not start the installer. You can try again.';
-      });
-      return;
-    }
-
-    // Installer activity opened; keep dialog as a fallback if user returns.
     setState(() {
       _isWorking = false;
-      _error = 'Installer opened. Complete installation to use the new version.';
+      _error = ok
+          ? 'Installer opened. Complete installation to use the new version.'
+          : 'Could not start the installer. You can try again.';
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final hasDownload = _downloadedPath != null;
-    return AlertDialog(
-      icon: Container(
-        width: 70,
-        height: 70,
-        decoration: const BoxDecoration(
-          color: AppColors.lime,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.new_releases_rounded,
-          size: 32,
-          color: AppColors.ink,
-        ),
-      ),
-      title: const Text('New release detected'),
-      content: Column(
+    final buttonLabel = hasDownload
+        ? (_error != null ? 'Install update' : 'Install again')
+        : (_error == null ? 'Download & install' : 'Try again');
+
+    return _DialogFrame(
+      icon: Icons.rocket_launch_rounded,
+      iconGradient: AppColors.accentGradient,
+      title: 'New release detected',
+      actions: [
+        FilledButton(onPressed: _isWorking ? null : _downloadAndInstall, child: Text(buttonLabel)),
+      ],
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _StatusPill(text: 'Version ${widget.release.versionName}', icon: Icons.new_releases_rounded),
+          const SizedBox(height: 12),
           Text(
-            'Version ${widget.release.versionName} is available. '
-            'Download and install it inside the app to continue.',
+            'A newer build of Classe is ready. Download it here and Android will guide you through installation.',
             textAlign: TextAlign.center,
+            style: Theme.of(context).dialogTheme.contentTextStyle,
           ),
           if (_isWorking) ...[
-            const SizedBox(height: 20),
-            if (_progress != null)
-              LinearProgressIndicator(
-                value: _progress,
-                backgroundColor: const Color(0xFFE8E8E3),
-                color: AppColors.ink,
-              )
-            else
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(value: _progress, minHeight: 8),
+            ),
             const SizedBox(height: 10),
             Text(
               _progress != null
                   ? 'Downloading update… ${(_progress! * 100).toStringAsFixed(0)}%'
                   : (hasDownload ? 'Starting installer…' : 'Downloading update…'),
-              style: const TextStyle(fontSize: 13),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textMuted),
             ),
           ],
           if (_error != null) ...[
-            const SizedBox(height: 14),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.error,
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _error!.contains('Installer opened') ? const Color(0xFFEFFFFB) : const Color(0xFFFFECEB),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _error!.contains('Installer opened') ? const Color(0xFFBDEBDD) : const Color(0xFFF6C4C1)),
+              ),
+              child: Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  color: _error!.contains('Installer opened') ? AppColors.success : AppColors.danger,
+                ),
               ),
             ),
           ],
         ],
       ),
-      actionsAlignment: MainAxisAlignment.center,
-      actions: [
-        FilledButton(
-          onPressed: _isWorking ? null : _downloadAndInstall,
-          child: Text(
-            hasDownload
-                ? (_error != null ? 'Install update' : 'Install again')
-                : (_error == null ? 'Download & install' : 'Try again'),
-          ),
-        ),
-      ],
     );
   }
 }
 
-/// Non-dismissible dialog that forces the user to download the update.
 class _UpdateRequiredDialog extends StatefulWidget {
   const _UpdateRequiredDialog({required this.updater});
-
   final AppUpdater updater;
 
   @override
@@ -315,64 +351,37 @@ class _UpdateRequiredDialogState extends State<_UpdateRequiredDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      icon: Container(
-        width: 70,
-        height: 70,
-        decoration: const BoxDecoration(
-          color: AppColors.lime,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.system_update_rounded,
-          size: 32,
-          color: AppColors.ink,
-        ),
-      ),
-      title: const Text('Update required'),
-      content: Column(
+    return _DialogFrame(
+      icon: Icons.system_update_rounded,
+      iconGradient: AppColors.accentGradient,
+      title: 'Update required',
+      actions: [
+        FilledButton(onPressed: _isDownloading ? null : _download, child: Text(_error == null ? 'Update now' : 'Try again')),
+      ],
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'A new version of Classe is required to continue. '
-            'Update now to keep using the app.',
+          Text(
+            'A new version of Classe is required to continue. Update now to keep using the app.',
             textAlign: TextAlign.center,
+            style: Theme.of(context).dialogTheme.contentTextStyle,
           ),
           if (_isDownloading) ...[
-            const SizedBox(height: 20),
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            const SizedBox(height: 16),
+            const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
             const SizedBox(height: 10),
-            const Text('Downloading update…', style: TextStyle(fontSize: 13)),
+            const Text('Downloading update…', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
           ],
           if (_error != null) ...[
-            const SizedBox(height: 14),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
+            const SizedBox(height: 12),
+            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.danger, fontWeight: FontWeight.w600)),
           ],
         ],
       ),
-      actionsAlignment: MainAxisAlignment.center,
-      actions: [
-        FilledButton(
-          onPressed: _isDownloading ? null : _download,
-          child: Text(_error == null ? 'Update now' : 'Try again'),
-        ),
-      ],
     );
   }
 }
 
-/// Non-dismissible dialog shown once the patch has been downloaded.
 class _RestartRequiredDialog extends StatefulWidget {
   const _RestartRequiredDialog();
 
@@ -392,9 +401,6 @@ class _RestartRequiredDialogState extends State<_RestartRequiredDialog> {
       _error = null;
     });
 
-    // Android implements "classe/restart" natively: it relaunches the launch
-    // activity and kills the current process, so the downloaded patch is
-    // loaded on the next cold start.
     if (defaultTargetPlatform == TargetPlatform.android) {
       try {
         await _restartChannel.invokeMethod<void>('restart');
@@ -415,58 +421,33 @@ class _RestartRequiredDialogState extends State<_RestartRequiredDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      icon: Container(
-        width: 70,
-        height: 70,
-        decoration: const BoxDecoration(
-          color: AppColors.lime,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.restart_alt_rounded,
-          size: 34,
-          color: AppColors.ink,
-        ),
-      ),
-      title: const Text('Restart required'),
-      content: Column(
+    return _DialogFrame(
+      icon: Icons.restart_alt_rounded,
+      iconGradient: AppColors.warmGradient,
+      title: 'Restart required',
+      actions: [
+        FilledButton(onPressed: _isRestarting ? null : _restart, child: const Text('Restart now')),
+      ],
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'The update has been downloaded. Restart the app to apply it.',
             textAlign: TextAlign.center,
+            style: Theme.of(context).dialogTheme.contentTextStyle,
           ),
           if (_isRestarting) ...[
-            const SizedBox(height: 20),
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            const SizedBox(height: 16),
+            const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
             const SizedBox(height: 10),
-            const Text('Restarting…', style: TextStyle(fontSize: 13)),
+            const Text('Restarting…', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
           ],
           if (_error != null) ...[
-            const SizedBox(height: 14),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
+            const SizedBox(height: 12),
+            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.danger, fontWeight: FontWeight.w600)),
           ],
         ],
       ),
-      actionsAlignment: MainAxisAlignment.center,
-      actions: [
-        FilledButton(
-          onPressed: _isRestarting ? null : _restart,
-          child: const Text('Restart now'),
-        ),
-      ],
     );
   }
 }

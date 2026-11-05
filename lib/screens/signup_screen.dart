@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../data/auth_service.dart';
 import '../models/account.dart';
@@ -63,7 +63,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _isSubmitting = false;
         _error = error.message;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _isSubmitting = false;
@@ -77,8 +77,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return AuthShell(
       eyebrow: 'GET STARTED',
       title: 'Create your account',
-      subtitle:
-          'A calmer way to plan your day. Everything stays on this device.',
+      subtitle: 'Set up a local account and start scheduling reminders in seconds.',
       footer: AuthFooterLink(
         question: 'Already have an account?',
         action: 'Log in',
@@ -91,7 +90,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           children: [
             if (_error != null) ...[
               AuthErrorBanner(message: _error!),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
             ],
             TextFormField(
               controller: _nameController,
@@ -101,7 +100,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               decoration: const InputDecoration(
                 labelText: 'Full name',
                 hintText: 'Ada Lovelace',
-                prefixIcon: Icon(Icons.person_outline_rounded),
+                prefixIcon: Icon(Icons.person_rounded),
               ),
               validator: (value) {
                 final name = value?.trim() ?? '';
@@ -119,7 +118,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               decoration: const InputDecoration(
                 labelText: 'Email',
                 hintText: 'you@example.com',
-                prefixIcon: Icon(Icons.mail_outline_rounded),
+                prefixIcon: Icon(Icons.alternate_email_rounded),
               ),
               validator: (value) {
                 final email = value?.trim() ?? '';
@@ -139,23 +138,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
               decoration: InputDecoration(
                 labelText: 'Password',
                 hintText: 'At least 6 characters',
-                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                prefixIcon: const Icon(Icons.lock_rounded),
                 suffixIcon: IconButton(
                   tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                  icon: Icon(
-                    _obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                  ),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(_obscurePassword ? Icons.visibility_rounded : Icons.visibility_off_rounded),
                 ),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) return 'Choose a password';
-                if (value.length < 6) {
-                  return 'Use at least 6 characters';
-                }
+                if (value.length < 6) return 'Use at least 6 characters';
                 return null;
               },
             ),
@@ -168,19 +160,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
               decoration: const InputDecoration(
                 labelText: 'Confirm password',
                 hintText: 'Repeat your password',
-                prefixIcon: Icon(Icons.lock_reset_rounded),
+                prefixIcon: Icon(Icons.verified_user_rounded),
               ),
               validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Confirm your password';
-                }
-                if (value != _passwordController.text) {
-                  return 'Passwords do not match';
-                }
+                if (value == null || value.isEmpty) return 'Confirm your password';
+                if (value != _passwordController.text) return 'Passwords do not match';
                 return null;
               },
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
             FilledButton(
               onPressed: _isSubmitting ? null : _submit,
               child: _isSubmitting
@@ -194,26 +182,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     )
                   : const Text('Create account'),
             ),
-            const SizedBox(height: 18),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.smartphone_rounded,
-                  size: 14,
-                  color: AppColors.textMuted,
-                ),
-                SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    'Stored locally. No email is ever sent.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textMuted,
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.phone_android_rounded, size: 16, color: AppColors.primary),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stored locally. No email is ever sent.',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, fontWeight: FontWeight.w500),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -221,3 +209,4 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 }
+

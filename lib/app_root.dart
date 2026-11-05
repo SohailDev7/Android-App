@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/auth_service.dart';
@@ -9,7 +9,6 @@ import 'screens/signup_screen.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
-/// Decides which screen to show based on the locally stored session.
 class AppRoot extends StatefulWidget {
   const AppRoot({super.key, this.authService, this.notifications});
 
@@ -59,9 +58,7 @@ class _AppRootState extends State<AppRoot> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const _SplashScreen();
-    }
+    if (_loading) return const _SplashScreen();
 
     final account = _account;
     if (account != null) {
@@ -95,54 +92,55 @@ class _SplashScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
-      child: ColoredBox(
-        color: AppColors.ink,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 78,
-                height: 78,
-                decoration: BoxDecoration(
-                  color: AppColors.lime,
-                  borderRadius: BorderRadius.circular(24),
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.bgTop, AppColors.bgMid, AppColors.bgBottom],
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 84,
+                  height: 84,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.accentGradient,
+                    borderRadius: BorderRadius.circular(26),
+                    boxShadow: AppColors.glowShadow,
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 42),
                 ),
-                child: const Icon(
-                  Icons.task_alt_rounded,
-                  color: AppColors.ink,
-                  size: 40,
+                const SizedBox(height: 22),
+                const Text(
+                  'Classe',
+                  style: TextStyle(
+                    color: AppColors.textOnDark,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -1.2,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'classe',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1,
+                const SizedBox(height: 6),
+                const Text(
+                  'Getting your reminders ready',
+                  style: TextStyle(color: AppColors.textOnDarkMuted, fontSize: 13.5),
                 ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'reminders, reimagined',
-                style: TextStyle(
-                  color: Color(0x99FFFFFF),
-                  fontSize: 12.5,
-                  letterSpacing: 0.2,
+                const SizedBox(height: 28),
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.6,
+                    valueColor: AlwaysStoppedAnimation(AppColors.accent),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 30),
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  valueColor: AlwaysStoppedAnimation(AppColors.lime),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
